@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoría de Inventarios Colaborativa</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- XLSX Library for Excel handling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div id="loader-overlay" class="hidden">
+        <div class="loader"></div>
+    </div>
+
+    <!-- Login/Register Container -->
+    <div id="login-container" class="container">
+        <div class="login-card">
+            <img src="https://placehold.co/150x50/FFFFFF/C81E32?text=LogoCo" alt="Logo de la Compañía" class="logo">
+            <div id="login-form-container">
+                <h1>Iniciar Sesión</h1>
+                <p>Ingresa tus credenciales para acceder.</p>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-email">Correo Electrónico</label>
+                        <input type="email" id="login-email" class="input-base" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Contraseña</label>
+                        <input type="password" id="login-password" class="input-base" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary full-width">Acceder</button>
+                </form>
+                <p class="toggle-form-text">¿No tienes una cuenta? <span id="show-register-link" class="link">Regístrate aquí.</span></p>
+            </div>
+            <div id="register-form-container" class="hidden">
+                <h1>Crear Cuenta</h1>
+                <p>Completa el formulario para registrarte.</p>
+                <form id="register-form">
+                    <div class="form-group">
+                        <label for="register-email">Correo Electrónico</label>
+                        <input type="email" id="register-email" class="input-base" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Contraseña</label>
+                        <input type="password" id="register-password" class="input-base" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary full-width">Registrar</button>
+                </form>
+                <p class="toggle-form-text">¿Ya tienes una cuenta? <span id="show-login-link" class="link">Inicia sesión.</span></p>
+            </div>
+            <p id="auth-error" class="feedback error"></p>
+        </div>
+    </div>
+
+    <!-- Main App Container (Hidden by default) -->
+    <div id="app-container" class="hidden">
+        <header class="app-header">
+            <img src="https://placehold.co/120x40/FFFFFF/1A237E?text=LogoCo" alt="Logo App" class="logo-app">
+            <div class="user-info">
+                <p id="user-email"></p>
+                <button id="logout-button" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <main class="container">
+            <nav class="tabs">
+                <button class="tab-item active" data-tab="gestion">1. Gestión de Auditorías</button>
+                <button class="tab-item" data-tab="conteo" id="conteo-tab" disabled>2. Realizar Conteo</button>
+                <button class="tab-item" data-tab="reporte" id="reporte-tab" disabled>3. Finalizar y Reportar</button>
+            </nav>
+
+            <!-- Tab 1: Gestión de Auditorías -->
+            <div id="gestion" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Panel de Auditorías</h2>
+                        <button id="show-create-audit-modal-button" class="btn btn-primary">+ Crear Nueva Auditoría</button>
+                    </div>
+                    <p>Selecciona una auditoría para empezar el conteo o crea una nueva.</p>
+                    <div id="audits-list" class="audits-list-container">
+                        <!-- Audit items will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Realizar Conteo -->
+            <div id="conteo" class="tab-content">
+                <div class="card">
+                    <div id="selected-audit-info-conteo"></div>
+                    <div id="conteo-wrapper" class="hidden">
+                        <h2>Registro de Inventario Físico</h2>
+                        <div class="form-group">
+                            <label for="subinventario-select">Selecciona el Subinventario a auditar:</label>
+                            <select id="subinventario-select" class="input-base"></select>
+                        </div>
+                        <div id="conteo-form-section" class="hidden">
+                            <hr>
+                            <h3>Registrar Conteo de Artículos</h3>
+                            <form id="conteo-form">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="item-name-input">Nombre de Artículo (Escanear o buscar)</label>
+                                        <input type="text" id="item-name-input" list="item-datalist" class="input-base" placeholder="Escanea o escribe para buscar...">
+                                        <datalist id="item-datalist"></datalist>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="item-description">Descripción de Artículo</label>
+                                        <input type="text" id="item-description" class="input-base" disabled>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="item-location">Ubicación (Estantería)</label>
+                                        <input type="text" id="item-location" class="input-base" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="item-quantity">Cantidad Contada</label>
+                                        <input type="number" id="item-quantity" class="input-base" required min="0">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-secondary">Agregar Registro</button>
+                            </form>
+                            <hr>
+                            <h3>Registros Agregados en esta sesión</h3>
+                            <div class="table-container">
+                                <table id="conteo-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nombre Artículo</th>
+                                            <th>Descripción</th>
+                                            <th>Ubicación</th>
+                                            <th>Cantidad</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="form-group">
+                                <label for="auditor-name">Confirmado por (Nombre del auditor):</label>
+                                <input type="text" id="auditor-name" class="input-base" placeholder="Ingresa tu nombre completo">
+                            </div>
+                            <button id="confirmar-conteo-button" class="btn btn-primary">Confirmar y Guardar Conteo Físico</button>
+                            <div id="conteo-status" class="feedback"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Finalizar y Reportar -->
+            <div id="reporte" class="tab-content">
+                <div class="card">
+                    <div id="selected-audit-info-reporte"></div>
+                    <div id="reporte-wrapper" class="hidden">
+                        <h2>Reporte y Cruce de Auditoría</h2>
+                        <p>Genera el informe final con las diferencias o finaliza la auditoría para archivarla.</p>
+                        <div id="report-generation-status" class="feedback"></div>
+                        <div class="button-group">
+                            <button id="export-button" class="btn btn-primary">Generar y Exportar Auditoría</button>
+                            <button id="finalize-audit-button" class="btn btn-danger">Finalizar Auditoría (Archivar)</button>
+                        </div>
+                        <p class="small-text">Al finalizar una auditoría, ya no se podrán agregar más conteos. Esta acción es irreversible.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for Creating a New Audit -->
+    <div id="create-audit-modal" class="modal hidden">
+        <div class="modal-content">
+            <span id="close-modal-button" class="close-button">&times;</span>
+            <h2>Crear Nueva Auditoría</h2>
+            <form id="create-audit-form">
+                <div class="form-group">
+                    <label for="audit-name-input">Nombre Descriptivo de la Auditoría</label>
+                    <input type="text" id="audit-name-input" class="input-base" required placeholder="Ej: Inventario Bodega Principal - Q3 2025">
+                </div>
+                <div class="form-group">
+                    <label>Archivo de Inventario del Sistema (.xlsx)</label>
+                    <p class="small-text">El sistema leerá las columnas: A (Nombre), B (Descripción), D (Ubicación), E (Subinventario) y H (Cantidad).</p>
+                    <div class="file-upload-wrapper">
+                        <input type="file" id="excel-file-input" accept=".xlsx, .xls" required>
+                        <label for="excel-file-input" class="btn btn-secondary">Seleccionar Archivo</label>
+                        <span id="file-name">Ningún archivo seleccionado</span>
+                    </div>
+                </div>
+                <button type="submit" id="create-audit-button" class="btn btn-primary">Crear y Procesar</button>
+                <div id="create-audit-status" class="feedback"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module" src="app.js"></script>
+
+</body>
+</html>
