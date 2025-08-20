@@ -129,3 +129,51 @@ export function showLoader() {
 export function hideLoader() {
     document.getElementById('loader-overlay').classList.add('hidden');
 }
+
+export function updateDashboard(stats, activity) {
+    const statsContainer = document.getElementById('dashboard-stats');
+    const activityFeedEl = document.getElementById('dashboard-activity-feed');
+
+    // Render Stats
+    statsContainer.innerHTML = `
+        <div class="stat-card">
+            <h4>Sesiones de Conteo</h4>
+            <p>${stats.sessions}</p>
+        </div>
+        <div class="stat-card">
+            <h4>Unidades Contadas</h4>
+            <p>${stats.units.toLocaleString('es-CO')}</p>
+        </div>
+        <div class="stat-card">
+            <h4>Referencias Únicas</h4>
+            <p>${stats.references}</p>
+        </div>
+        <div class="stat-card">
+            <h4>Subinventarios Auditados</h4>
+            <p>${stats.subinventories}</p>
+        </div>
+    `;
+
+    // Render Activity Feed
+    activityFeedEl.innerHTML = '';
+    if (activity.length === 0) {
+        activityFeedEl.innerHTML = '<li class="activity-item">No hay actividad reciente.</li>';
+        return;
+    }
+
+    activity.slice(0, 5).forEach(item => { // Show latest 5 activities
+        const li = document.createElement('li');
+        li.className = 'activity-item';
+        const totalItems = item.items.reduce((sum, curr) => sum + curr.cantidadFisica, 0);
+        li.innerHTML = `
+            <div>
+                <span class="auditor">${item.auditor}</span> guardó un conteo en
+                <span class="subinventory">${item.subinventario}</span>
+            </div>
+            <div class="details">
+                ${totalItems} unidades en ${item.items.length} referencias. - ${new Date(item.conteoDate.seconds * 1000).toLocaleString('es-CO')}
+            </div>
+        `;
+        activityFeedEl.appendChild(li);
+    });
+}

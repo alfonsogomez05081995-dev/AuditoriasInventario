@@ -8,7 +8,9 @@ import {
     Timestamp,
     orderBy,
     updateDoc,
-    writeBatch
+    writeBatch,
+    onSnapshot,
+    limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { db, auth } from './firebase-config.js';
 
@@ -76,6 +78,17 @@ export async function loadInventoryItemsBySubinventory(auditId, subinventario) {
     }
 }
 
+export async function loadAllInventoryItems(auditId) {
+    try {
+        const q = query(collection(db, `audits/${auditId}/inventoryItems`));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => doc.data());
+    } catch (error) {
+        console.error("Error loading all inventory items:", error);
+        throw new Error("Error al cargar todos los artículos de la auditoría.");
+    }
+}
+
 export async function savePhysicalCount(auditId, subinventario, auditor, conteoFisico) {
     try {
         const conteoData = {
@@ -109,13 +122,29 @@ export async function getPhysicalCountsForReport(auditId) {
         if (querySnapshot.empty) {
             return [];
         }
-        let allPhysicalCounts = [];
-        querySnapshot.forEach((doc) => {
-            allPhysicalCounts = allPhysicalCounts.concat(doc.data().items);
-        });
-        return allPhysicalCounts;
+        // Return the full documents, including their ID
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error("Error getting physical counts for report:", error);
         throw new Error("Ocurrió un error al obtener los conteos para el reporte.");
     }
+}
+
+export function listenToPhysicalCounts(auditId, callback) {
+    const q = query(
+        collection(db, "physicalCounts"),
+        where("auditId", "==", auditId),
+        orderBy("conteoDate", "desc"),
+        limit(100) // Limit to the last 100 counts for dashboard performance
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const counts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(counts);
+    }, (error) => {
+        console.error("Error listening to physical counts:", error);
+        callback([]); // Send empty array on error
+    });
+
+    return unsubscribe;
 }

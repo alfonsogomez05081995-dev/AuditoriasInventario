@@ -343,3 +343,117 @@ tbody tr:hover {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Report Filter Styles */
+.card-sub-section {
+    background-color: var(--color-background-light);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-lg);
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--color-border);
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-lg);
+}
+
+.filter-group .bold-label {
+    font-weight: 700;
+    color: var(--color-secondary);
+    margin-bottom: var(--space-md);
+    display: block;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin-right: var(--space-sm);
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.checkbox-group label {
+    margin-bottom: 0;
+    font-weight: 400;
+}
+
+/* Dashboard Styles */
+#dashboard-container {
+    padding: var(--space-lg);
+    background-color: var(--color-background-light);
+    border-radius: var(--border-radius-md);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--color-border);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.stat-card {
+    background-color: var(--color-background-white);
+    padding: var(--space-md);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    border-left: 5px solid var(--color-primary-mid);
+}
+
+.stat-card h4 {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-sm);
+    text-transform: uppercase;
+}
+
+.stat-card p {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+#dashboard-activity h4 {
+    color: var(--color-secondary);
+    margin-bottom: var(--space-md);
+}
+
+.activity-feed {
+    list-style: none;
+    padding: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-sm);
+}
+
+.activity-item {
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-item .auditor {
+    font-weight: 600;
+    color: var(--color-primary-mid);
+}
+
+.activity-item .details {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+

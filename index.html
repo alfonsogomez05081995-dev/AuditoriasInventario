@@ -83,6 +83,17 @@
                         <button id="show-create-audit-modal-button" class="btn btn-primary">+ Crear Nueva Auditoría</button>
                     </div>
                     <p>Selecciona una auditoría para empezar el conteo o crea una nueva.</p>
+                    <div id="dashboard-container" class="hidden">
+                        <div id="dashboard-stats" class="stats-grid">
+                            <!-- Stat cards will be injected here by ui.js -->
+                        </div>
+                        <div id="dashboard-activity">
+                            <h4>Actividad Reciente</h4>
+                            <ul id="dashboard-activity-feed" class="activity-feed">
+                                <!-- Activity items will be injected here by ui.js -->
+                            </ul>
+                        </div>
+                    </div>
                     <div id="audits-list" class="audits-list-container">
                         <!-- Audit items will be dynamically inserted here -->
                     </div>
@@ -116,6 +127,11 @@
                                     <div class="form-group">
                                         <label for="item-location">Ubicación (Estantería)</label>
                                         <input type="text" id="item-location" class="input-base" required>
+                                        <div id="location-selector-container" class="hidden">
+                                            <select id="location-selector" class="input-base"></select>
+                                            <button type="button" id="force-location-btn" class="btn btn-sm btn-secondary">Forzar Localizador</button>
+                                        </div>
+                                        <input type="text" id="manual-location-input" class="input-base hidden" placeholder="Introducir localizador manual">
                                     </div>
                                     <div class="form-group">
                                         <label for="item-quantity">Cantidad Contada</label>
@@ -158,6 +174,55 @@
                     <div id="reporte-wrapper" class="hidden">
                         <h2>Reporte y Cruce de Auditoría</h2>
                         <p>Genera el informe final con las diferencias o finaliza la auditoría para archivarla.</p>
+                        
+                        <div id="report-filters" class="card-sub-section">
+                            <h4>Filtros del Reporte</h4>
+                            <div class="filter-grid">
+                                <div class="filter-group">
+                                    <label class="bold-label">1. Seleccione los reportes a generar:</label>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="include-detailed" name="report-type" checked>
+                                        <label for="include-detailed">Reporte Detallado por Localizador</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="include-national-consolidated" name="report-type" checked>
+                                        <label for="include-national-consolidated">Reporte Nacional Consolidado (por Referencia)</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="include-subinventory-consolidated" name="report-type" checked>
+                                        <label for="include-subinventory-consolidated">Reportes Consolidados por Subinventario</label>
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <label class="bold-label">2. Filtre por estado de diferencia:</label>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="filter-sobrantes" name="data-filter">
+                                        <label for="filter-sobrantes">Mostrar únicamente diferencias "Sobrantes"</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="filter-faltantes" name="data-filter">
+                                        <label for="filter-faltantes">Mostrar únicamente diferencias "Faltantes"</label>
+                                    </div>
+                                     <div class="checkbox-group">
+                                        <input type="checkbox" id="filter-sin-diferencia" name="data-filter">
+                                        <label for="filter-sin-diferencia">Mostrar únicamente items sin diferencia</label>
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <label class="bold-label">3. Filtre por texto específico:</label>
+                                    <div class="form-group">
+                                        <input type="text" id="filter-referencia" class="input-base" placeholder="Filtrar por Referencia...">
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="filter-localizador" class="input-base" placeholder="Filtrar por Localizador...">
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="filter-subinventario" class="input-base" placeholder="Filtrar por Subinventario...">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="report-generation-status" class="feedback"></div>
                         <div class="button-group">
                             <button id="export-button" class="btn btn-primary">Generar y Exportar Auditoría</button>
@@ -191,6 +256,30 @@
                 </div>
                 <button type="submit" id="create-audit-button" class="btn btn-primary">Crear y Procesar</button>
                 <div id="create-audit-status" class="feedback"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Non-Existent Item -->
+    <div id="sobrante-modal" class="modal hidden">
+        <div class="modal-content">
+            <span id="close-sobrante-modal-button" class="close-button">&times;</span>
+            <h2>Registrar Referencia Sobrante</h2>
+            <p>El artículo <strong id="sobrante-item-name"></strong> no se encontró en este subinventario. Por favor, registra los detalles del conteo físico.</p>
+            <form id="sobrante-form">
+                <div class="form-group">
+                    <label for="sobrante-description">Descripción</label>
+                    <input type="text" id="sobrante-description" class="input-base" placeholder="Descripción del artículo">
+                </div>
+                <div class="form-group">
+                    <label for="sobrante-location">Ubicación</label>
+                    <input type="text" id="sobrante-location" class="input-base" required placeholder="Ubicación física encontrada">
+                </div>
+                <div class="form-group">
+                    <label for="sobrante-quantity">Cantidad Contada</label>
+                    <input type="number" id="sobrante-quantity" class="input-base" required min="0">
+                </div>
+                <button type="submit" class="btn btn-primary">Registrar Sobrante</button>
             </form>
         </div>
     </div>
