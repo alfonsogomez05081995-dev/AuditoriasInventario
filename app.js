@@ -275,7 +275,7 @@ function handleDashboardUpdate(counts) {
         sessions: counts.length,
         units: totalUnits,
         references: uniqueReferences,
-        subinventories: activeSubinventories
+        subinventaries: activeSubinventories
     };
 
     ui.updateDashboard(stats, counts);
@@ -322,9 +322,7 @@ function resetConteoForm() {
     ui.renderConteoTable(domElements.conteoTableBody, conteoFisico, handleDeleteConteoItem);
     domElements.conteoForm.reset();
     domElements.auditorNameInput.value = '';
-    domElements.locationSelectorContainer.classList.add('hidden');
-    domElements.manualLocationInput.classList.add('hidden');
-    domElements.itemLocationInput.disabled = false;
+    domElements.itemLocationInput.disabled = true;
 }
 
 function handleDeleteConteoItem(index) {
@@ -334,48 +332,30 @@ function handleDeleteConteoItem(index) {
 
 domElements.itemNameInput.addEventListener('change', () => {
     const selectedItemName = domElements.itemNameInput.value;
-    const items = inventarioAudit.filter(item => item.nombre === selectedItemName && item.subinventario === currentSubinventario);
+    const item = inventarioAudit.find(item => item.nombre === selectedItemName && item.subinventario === currentSubinventario);
 
     domElements.itemLocationInput.value = '';
-    domElements.itemDescriptionInput.value = items.length > 0 ? items[0].descripcion : '';
-    domElements.locationSelectorContainer.classList.add('hidden');
-    domElements.manualLocationInput.classList.add('hidden');
-    domElements.itemLocationInput.disabled = false;
+    domElements.itemDescriptionInput.value = item ? item.descripcion : '';
+    domElements.manualLocationInput.value = '';
 
-    if (items.length > 1) {
-        domElements.locationSelectorContainer.classList.remove('hidden');
-        domElements.itemLocationInput.disabled = true;
-        const locations = items.map(item => item.ubicacion);
-        ui.populateSubinventarioSelect(domElements.locationSelector, locations);
-        domElements.locationSelector.value = locations[0];
-    } else if (items.length === 1) {
-        domElements.itemLocationInput.value = items[0].ubicacion;
-    }
-});
-
-domElements.forceLocationBtn.addEventListener('click', () => {
-    domElements.manualLocationInput.classList.remove('hidden');
-    domElements.manualLocationInput.focus();
+    if (item) {
+        domElements.itemLocationInput.value = item.ubicacion;
+    } 
 });
 
 domElements.conteoForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const nombre = domElements.itemNameInput.value;
-    let ubicacion;
-    if (!domElements.manualLocationInput.classList.contains('hidden')) {
-        ubicacion = domElements.manualLocationInput.value;
-    } else if (!domElements.locationSelectorContainer.classList.contains('hidden')) {
-        ubicacion = domElements.locationSelector.value;
-    } else {
-        ubicacion = domElements.itemLocationInput.value;
-    }
+    const ubicacionOriginal = domElements.itemLocationInput.value;
+    const ubicacionFisica = domElements.manualLocationInput.value;
 
     const newItem = {
         nombre: nombre,
         descripcion: domElements.itemDescriptionInput.value,
-        ubicacion: ubicacion,
+        ubicacion: ubicacionFisica,
+        ubicacionOriginal: ubicacionOriginal,
         cantidadFisica: parseInt(document.getElementById('item-quantity').value, 10),
-        localizadorForzado: !domElements.manualLocationInput.classList.contains('hidden') || !domElements.locationSelectorContainer.classList.contains('hidden')
+        localizadorForzado: true
     };
 
     if (!newItem.nombre || !newItem.ubicacion || isNaN(newItem.cantidadFisica)) {
@@ -398,10 +378,8 @@ domElements.conteoForm.addEventListener('submit', (e) => {
 });
 
 function resetLocationInputs() {
-    domElements.locationSelectorContainer.classList.add('hidden');
-    domElements.manualLocationInput.classList.add('hidden');
-    domElements.itemLocationInput.disabled = false;
     domElements.itemLocationInput.value = '';
+    domElements.manualLocationInput.value = '';
 }
 
 domElements.sobranteForm.addEventListener('submit', (e) => {
@@ -582,7 +560,8 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             'Subinventario': item.subinventario,
             'Referencia': item.nombre,
             'Descripción': item.descripcion,
-            'Localizador': item.ubicacion,
+            'Localizador en Sistema': item.ubicacion,
+            'Localizador Físico': item.ubicacion, // Initially the same
             'Cantidad Sistema': item.cantidadSistema,
             'Cantidad Física': 0,
             'Estado': 'FALTANTE',
@@ -591,13 +570,17 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     });
 
     flatPhysicalCounts.forEach(item => {
-        const key = `${item.nombre}_${item.ubicacion}`.toLowerCase();
+        const key = item.localizadorForzado ? `${item.nombre}_${item.ubicacionOriginal}`.toLowerCase() : `${item.nombre}_${item.ubicacion}`.toLowerCase();
+        
         if (detailedData[key]) {
             detailedData[key]['Cantidad Física'] += item.cantidadFisica;
             detailedData[key]['ID Conteo'] = item.auditor;
             detailedData[key]['# Conteo'] = item.numeroConteo;
             detailedData[key]['Auditor'] = item.auditor;
             detailedData[key]['Localizador Forzado'] = item.localizadorForzado ? 'Sí' : 'No';
+            if(item.localizadorForzado) {
+                detailedData[key]['Localizador Físico'] = item.ubicacion;
+            }
             detailedData[key]['Estado'] = ''; // Clear status, will be recalculated
             detailedData[key]['ID_Documento_Firestore'] = item.idConteo;
         } else {
@@ -605,12 +588,13 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                 'ID Conteo': item.auditor,
                 '# Conteo': item.numeroConteo,
                 'Auditor': item.auditor,
-                'Localizador Forzado': item.localizadorForzado ? 'Sí' : 'No',
+                'Localizador Forzado': 'Sí',
                 'Subinventario': item.subinventario,
                 'Referencia': item.nombre,
                 'Descripción': item.descripcion || '',
-                'Localizador': item.ubicacion,
-                'Cantidad Sistema': 0,
+                'Localizador en Sistema': item.ubicacionOriginal || 'N/A',
+                'Localizador Físico': item.ubicacion,
+                'Cantidad Sistema': 0, // It's a sobrante, so no system quantity
                 'Cantidad Física': item.cantidadFisica,
                 'Estado': 'SOBRANTE',
                 'ID_Documento_Firestore': item.idConteo
@@ -645,7 +629,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
         detailedReport = detailedReport.filter(item => item.Referencia.toLowerCase().includes(filters.referencia.toLowerCase()));
     }
     if (filters.localizador) {
-        detailedReport = detailedReport.filter(item => item.Localizador.toLowerCase().includes(filters.localizador.toLowerCase()));
+        detailedReport = detailedReport.filter(item => item['Localizador Físico'].toLowerCase().includes(filters.localizador.toLowerCase()));
     }
     if (filters.subinventario) {
         detailedReport = detailedReport.filter(item => item.Subinventario.toLowerCase().includes(filters.subinventario.toLowerCase()));
@@ -654,9 +638,28 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     const finalReports = {};
 
     // Generate Forced Locators report
-    const forcedLocatorsData = detailedReport.filter(item => item['Localizador Forzado'] === 'Sí');
+    const forcedLocatorsData = detailedReport
+        .filter(item => item['Localizador Forzado'] === 'Sí' && item['Localizador en Sistema'] !== item['Localizador Físico'])
+        .map(item => ({
+            'Subinventario': item.Subinventario,
+            'Referencia': item.Referencia,
+            'Descripción': item.Descripción,
+            'Localizador en Auditoria': item['Localizador en Sistema'],
+            'Localizador Físico Real': item['Localizador Físico'],
+            'Cantidad Contada': item['Cantidad Física'],
+            'Auditor': item.Auditor,
+            '# Conteo': item['# Conteo']
+        }));
+
     if (forcedLocatorsData.length > 0) {
-        finalReports.forcedLocators = XLSX.utils.json_to_sheet(forcedLocatorsData);
+        const header = [
+            { A: 'Reporte de Localizadores Forzados con Discrepancia' },
+            { A: `Total de Localizadores Forzados con Discrepancia: ${forcedLocatorsData.length}` },
+            { A: '' }
+        ];
+        const worksheet = XLSX.utils.json_to_sheet(forcedLocatorsData, { origin: 'A4' });
+        XLSX.utils.sheet_add_json(worksheet, header, { skipHeader: true, origin: 'A1' });
+        finalReports.forcedLocators = worksheet;
     }
 
     if (filters.includeDetailed) {

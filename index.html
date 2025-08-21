@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auditoría de Inventarios Colaborativa</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -125,13 +126,12 @@
                                         <input type="text" id="item-description" class="input-base" disabled>
                                     </div>
                                     <div class="form-group">
-                                        <label for="item-location">Ubicación (Estantería)</label>
-                                        <input type="text" id="item-location" class="input-base" required>
-                                        <div id="location-selector-container" class="hidden">
-                                            <select id="location-selector" class="input-base"></select>
-                                            <button type="button" id="force-location-btn" class="btn btn-sm btn-secondary">Forzar Localizador</button>
-                                        </div>
-                                        <input type="text" id="manual-location-input" class="input-base hidden" placeholder="Introducir localizador manual">
+                                        <label for="item-location">Ubicación en Sistema</label>
+                                        <input type="text" id="item-location" class="input-base" disabled>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="manual-location-input">Ubicación Física Real (Forzoso)</label>
+                                        <input type="text" id="manual-location-input" class="input-base" required placeholder="Escanear o digitar ubicación física">
                                     </div>
                                     <div class="form-group">
                                         <label for="item-quantity">Cantidad Contada</label>
