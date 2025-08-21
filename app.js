@@ -215,9 +215,9 @@ function parseExcel(file) {
                 const parsedData = rows.map(row => ({
                     nombre: row[0] || '',
                     descripcion: row[1] || '',
+                    subinventario: row[2] || '',
                     ubicacion: row[3] || '',
-                    subinventario: row[4] || '',
-                    cantidadSistema: parseFloat(row[7]) || 0
+                    cantidadSistema: parseFloat(row[4]) || 0
                 }));
                 resolve(parsedData);
             }
@@ -551,7 +551,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     // 3. Create the detailed data map (base for all reports)
     const detailedData = {};
     systemInventory.forEach(item => {
-        const key = `${item.nombre}_${item.ubicacion}`.toLowerCase();
+        const key = `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
         detailedData[key] = {
             'ID Conteo': 'N/A',
             '# Conteo': 'N/A',
@@ -570,7 +570,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     });
 
     flatPhysicalCounts.forEach(item => {
-        const key = item.localizadorForzado ? `${item.nombre}_${item.ubicacionOriginal}`.toLowerCase() : `${item.nombre}_${item.ubicacion}`.toLowerCase();
+        const key = item.localizadorForzado ? `${item.nombre}_${item.subinventario}_${item.ubicacionOriginal}`.toLowerCase() : `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
         
         if (detailedData[key]) {
             detailedData[key]['Cantidad Física'] += item.cantidadFisica;
