@@ -674,16 +674,28 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                 nationalConsolidatedData[key] = {
                     'Referencia': item.Referencia,
                     'Descripción': item.Descripción,
+                    'Subinventarios': new Set(),
                     'Cantidad Sistema': 0,
                     'Cantidad Física': 0,
+                    'Estados': new Set(),
+                    'Localizadores Forzados': new Set(),
                 };
             }
             nationalConsolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
             nationalConsolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
+            nationalConsolidatedData[key]['Subinventarios'].add(item.Subinventario);
+            nationalConsolidadoData[key]['Estados'].add(item.Estado);
+            nationalConsolidatedData[key]['Localizadores Forzados'].add(item['Localizador Forzado']);
         });
         const nationalConsolidatedReport = Object.values(nationalConsolidatedData).map(item => ({
-            ...item,
-            'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema']
+            'Referencia': item.Referencia,
+            'Descripción': item.Descripción,
+            'Subinventarios': [...item.Subinventarios].join(', '),
+            'Cantidad Sistema': item['Cantidad Sistema'],
+            'Cantidad Física': item['Cantidad Física'],
+            'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
+            'Resumen de Estados': [...item.Estados].join(', '),
+            'Contiene Localizadores Forzados': [...item.Localizadores Forzados].includes('Sí') ? 'Sí' : 'No',
         }));
         finalReports.nationalConsolidated = XLSX.utils.json_to_sheet(nationalConsolidatedReport);
     }
@@ -706,14 +718,23 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                         'Descripción': item.Descripción,
                         'Cantidad Sistema': 0,
                         'Cantidad Física': 0,
+                        'Estados': new Set(),
+                        'Localizadores Forzados': new Set(),
                     };
                 }
                 consolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
                 consolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
+                consolidatedData[key]['Estados'].add(item.Estado);
+                consolidatedData[key]['Localizadores Forzados'].add(item['Localizador Forzado']);
             });
             const reportData = Object.values(consolidatedData).map(item => ({
-                ...item,
-                'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema']
+                'Referencia': item.Referencia,
+                'Descripción': item.Descripción,
+                'Cantidad Sistema': item['Cantidad Sistema'],
+                'Cantidad Física': item['Cantidad Física'],
+                'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
+                'Resumen de Estados': [...item.Estados].join(', '),
+                'Contiene Localizadores Forzados': [...item.Localizadores Forzados].includes('Sí') ? 'Sí' : 'No',
             }));
 
             const header = [
