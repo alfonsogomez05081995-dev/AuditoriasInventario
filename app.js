@@ -684,7 +684,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             nationalConsolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
             nationalConsolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
             nationalConsolidatedData[key]['Subinventarios'].add(item.Subinventario);
-            nationalConsolidadoData[key]['Estados'].add(item.Estado);
+            nationalConsolidatedData[key]['Estados'].add(item.Estado);
             nationalConsolidatedData[key]['Localizadores Forzados'].add(item['Localizador Forzado']);
         });
         const nationalConsolidatedReport = Object.values(nationalConsolidatedData).map(item => ({
