@@ -695,7 +695,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             'Cantidad Física': item['Cantidad Física'],
             'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
             'Resumen de Estados': [...item.Estados].join(', '),
-            'Contiene Localizadores Forzados': [...item.Localizadores Forzados].includes('Sí') ? 'Sí' : 'No',
+            'Contiene Localizadores Forzados': [...item['Localizadores Forzados']].includes('Sí') ? 'Sí' : 'No',
         }));
         finalReports.nationalConsolidated = XLSX.utils.json_to_sheet(nationalConsolidatedReport);
     }
@@ -734,7 +734,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                 'Cantidad Física': item['Cantidad Física'],
                 'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
                 'Resumen de Estados': [...item.Estados].join(', '),
-                'Contiene Localizadores Forzados': [...item.Localizadores Forzados].includes('Sí') ? 'Sí' : 'No',
+                'Contiene Localizadores Forzados': [...item['Localizadores Forzados']].includes('Sí') ? 'Sí' : 'No',
             }));
 
             const header = [
