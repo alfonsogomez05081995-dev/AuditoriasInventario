@@ -5,13 +5,14 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebas
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCCiX9Xmm29OdqOKb8XVoI6cr52fCTm9Fg",
-  authDomain: "auditoriainventariosdezaz1.firebaseapp.com",
-  projectId: "auditoriainventariosdezaz1",
-  storageBucket: "auditoriainventariosdezaz1.firebasestorage.app",
-  messagingSenderId: "426872106325",
-  appId: "1:426872106325:web:c0777cf99b6578a02253dc",
-  measurementId: "G-PZ7XER54T5"
+  apiKey: "AIzaSyCpgcCGd70n6Ex0MhXuFNYIBqRXi-2TVb4",
+  authDomain: "auditoriainventariosdezaz.firebaseapp.com",
+  databaseURL: "https://auditoriainventariosdezaz-default-rtdb.firebaseio.com",
+  projectId: "auditoriainventariosdezaz",
+  storageBucket: "auditoriainventariosdezaz.firebasestorage.app",
+  messagingSenderId: "304007591435",
+  appId: "1:304007591435:web:6922e3691c0376e17cb90e",
+  measurementId: "G-F72HDB9L4T"
 };
 
 // Initialize Firebase

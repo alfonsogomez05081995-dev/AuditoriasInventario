@@ -23,7 +23,9 @@ export function populateSubinventarioSelect(subinventarioSelect, subinventarios)
     subinventarioSelect.innerHTML = '<option value="">-- Elige un subinventario --</option>';
     if (!subinventarios || subinventarios.length === 0) return;
 
-    subinventarios.forEach(sub => {
+    const uniqueSubinventarios = [...new Set(subinventarios)];
+
+    uniqueSubinventarios.forEach(sub => {
         const option = document.createElement('option');
         option.value = sub;
         option.textContent = sub;

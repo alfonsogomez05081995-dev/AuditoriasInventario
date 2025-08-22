@@ -82,7 +82,7 @@ async function initializeAppState() {
         await loadAndRenderAudits();
         const storedAuditId = localStorage.getItem('selectedAuditId');
         if (storedAuditId && auditsCache.some(a => a.id === storedAuditId)) {
-            selectAudit(storedAuditId);
+            await selectAudit(storedAuditId);
         }
         else {
             clearSelectedAudit();
@@ -215,9 +215,12 @@ function parseExcel(file) {
                 const parsedData = rows.map(row => ({
                     nombre: row[0] || '',
                     descripcion: row[1] || '',
-                    subinventario: row[2] || '',
-                    ubicacion: row[3] || '',
-                    cantidadSistema: parseFloat(row[4]) || 0
+                    // row[2] is 'Nombre de entidad jurídica'
+                    ubicacion: row[3] || '', // 'Ubicación de inventario de localizador'
+                    subinventario: row[4] || '', // 'Subinventario'
+                    // row[5] is 'Subinventory Description'
+                    // row[6] is 'Organización de inventario - Nombre'
+                    cantidadSistema: parseFloat(row[7]) || 0 // 'Cantidad'
                 }));
                 resolve(parsedData);
             }
@@ -230,7 +233,7 @@ function parseExcel(file) {
     });
 }
 
-function selectAudit(auditId) {
+async function selectAudit(auditId) {
     if (unsubscribeDashboard) {
         unsubscribeDashboard();
         unsubscribeDashboard = null;
@@ -242,14 +245,32 @@ function selectAudit(auditId) {
         clearSelectedAudit();
         return;
     }
-    localStorage.setItem('selectedAuditId', auditId);
-    selectedAuditId = auditId;
-    ui.selectAuditUI(audit, domElements.selectedAuditInfoConteo, domElements.selectedAuditInfoReporte, domElements.conteoWrapper, domElements.reporteWrapper, domElements.conteoTab, domElements.reporteTab, domElements.finalizeAuditButton, domElements.subinventarioSelect, domElements.conteoFormSection);
     
-    document.getElementById('dashboard-container').classList.remove('hidden');
-    unsubscribeDashboard = firestoreService.listenToPhysicalCounts(auditId, handleDashboardUpdate);
+    ui.showLoader(); // Show loader while we fetch items
+    try {
+        // Fetch all items to derive the subinventories
+        const allItems = await firestoreService.loadAllInventoryItems(auditId);
+        const derivedSubinventarios = [...new Set(allItems.map(item => item.subinventario))].sort();
+        const modifiedAudit = { ...audit, subinventarios: derivedSubinventarios };
 
-    resetConteoForm();
+        localStorage.setItem('selectedAuditId', auditId);
+        selectedAuditId = auditId;
+        inventarioAudit = []; // Reset inventory on new audit selection.
+        
+        ui.selectAuditUI(modifiedAudit, domElements.selectedAuditInfoConteo, domElements.selectedAuditInfoReporte, domElements.conteoWrapper, domElements.reporteWrapper, domElements.conteoTab, domElements.reporteTab, domElements.finalizeAuditButton, domElements.subinventarioSelect, domElements.conteoFormSection);
+        
+        document.getElementById('dashboard-container').classList.remove('hidden');
+        if (unsubscribeDashboard) unsubscribeDashboard();
+        unsubscribeDashboard = firestoreService.listenToPhysicalCounts(auditId, handleDashboardUpdate);
+
+        resetConteoForm();
+    } catch (error) {
+        console.error("Error selecting audit and deriving subinventories:", error);
+        alert("Error al seleccionar la auditoría: " + error.message);
+        clearSelectedAudit();
+    } finally {
+        ui.hideLoader();
+    }
 }
 
 function clearSelectedAudit() {
