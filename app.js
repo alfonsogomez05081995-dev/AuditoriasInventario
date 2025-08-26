@@ -353,15 +353,32 @@ function handleDeleteConteoItem(index) {
 
 domElements.itemNameInput.addEventListener('change', () => {
     const selectedItemName = domElements.itemNameInput.value;
-    const item = inventarioAudit.find(item => item.nombre === selectedItemName && item.subinventario === currentSubinventario);
+    // Use filter to get all items matching the name in the current subinventory
+    const items = inventarioAudit.filter(item => item.nombre === selectedItemName && item.subinventario === currentSubinventario);
 
-    domElements.itemLocationInput.value = '';
-    domElements.itemDescriptionInput.value = item ? item.descripcion : '';
+    // Clear previous options and reset related fields
+    domElements.itemLocationInput.innerHTML = '';
+    domElements.itemDescriptionInput.value = '';
     domElements.manualLocationInput.value = '';
 
-    if (item) {
-        domElements.itemLocationInput.value = item.ubicacion;
-    } 
+    if (items.length > 0) {
+        // All items with the same name should have the same description
+        domElements.itemDescriptionInput.value = items[0].descripcion;
+        
+        // Populate the select with all found locations
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.ubicacion;
+            option.textContent = item.ubicacion;
+            domElements.itemLocationInput.appendChild(option);
+        });
+
+        // Enable the location selector
+        domElements.itemLocationInput.disabled = false;
+    } else {
+        // If no item is found, keep the location selector disabled
+        domElements.itemLocationInput.disabled = true;
+    }
 });
 
 domElements.conteoForm.addEventListener('submit', (e) => {
@@ -554,6 +571,16 @@ domElements.exportButton.addEventListener('click', async () => {
 });
 
 function generateReportData(systemInventory, countSessions, subinventarios, filters) {
+    // Create a map of all system locations for easy lookup
+    const systemLocationsMap = new Map();
+    systemInventory.forEach(item => {
+        const key = `${item.nombre}_${item.subinventario}`.toLowerCase();
+        if (!systemLocationsMap.has(key)) {
+            systemLocationsMap.set(key, []);
+        }
+        systemLocationsMap.get(key).push(item.ubicacion);
+    });
+
     // 1. Sort sessions to create a sequential count number
     const sortedSessions = countSessions.sort((a, b) => a.conteoDate.toMillis() - b.conteoDate.toMillis());
     const sessionsWithCountNumber = sortedSessions.map((session, index) => ({ ...session, numeroConteo: index + 1 }));
@@ -577,7 +604,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             'ID Conteo': 'N/A',
             '# Conteo': 'N/A',
             'Auditor': 'N/A',
-            'Localizador Forzado': 'No',
+            'Desajuste de Localizador': 'NO', // New Column
             'Subinventario': item.subinventario,
             'Referencia': item.nombre,
             'Descripción': item.descripcion,
@@ -591,31 +618,41 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     });
 
     flatPhysicalCounts.forEach(item => {
-        const key = item.localizadorForzado ? `${item.nombre}_${item.subinventario}_${item.ubicacionOriginal}`.toLowerCase() : `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
+        // Use the original location selected in the dropdown for matching
+        const key = `${item.nombre}_${item.subinventario}_${item.ubicacionOriginal}`.toLowerCase();
         
         if (detailedData[key]) {
             detailedData[key]['Cantidad Física'] += item.cantidadFisica;
             detailedData[key]['ID Conteo'] = item.auditor;
             detailedData[key]['# Conteo'] = item.numeroConteo;
             detailedData[key]['Auditor'] = item.auditor;
-            detailedData[key]['Localizador Forzado'] = item.localizadorForzado ? 'Sí' : 'No';
-            if(item.localizadorForzado) {
-                detailedData[key]['Localizador Físico'] = item.ubicacion;
+            
+            // New logic for locator mismatch
+            const systemLocs = systemLocationsMap.get(`${item.nombre}_${item.subinventario}`.toLowerCase()) || [];
+            const physicalLoc = item.ubicacion; // This is the forced location
+            if (systemLocs.includes(physicalLoc)) {
+                detailedData[key]['Desajuste de Localizador'] = 'NO';
+            } else {
+                detailedData[key]['Desajuste de Localizador'] = 'SI';
             }
+
+            detailedData[key]['Localizador Físico'] = physicalLoc;
             detailedData[key]['Estado'] = ''; // Clear status, will be recalculated
             detailedData[key]['ID_Documento_Firestore'] = item.idConteo;
         } else {
-            detailedData[key] = {
+            // This is a "sobrante" (surplus) item
+            const sobranteKey = `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
+            detailedData[sobranteKey] = {
                 'ID Conteo': item.auditor,
                 '# Conteo': item.numeroConteo,
                 'Auditor': item.auditor,
-                'Localizador Forzado': 'Sí',
+                'Desajuste de Localizador': 'SI', // Always a mismatch for sobrantes
                 'Subinventario': item.subinventario,
                 'Referencia': item.nombre,
                 'Descripción': item.descripcion || '',
-                'Localizador en Sistema': item.ubicacionOriginal || 'N/A',
+                'Localizador en Sistema': 'N/A',
                 'Localizador Físico': item.ubicacion,
-                'Cantidad Sistema': 0, // It's a sobrante, so no system quantity
+                'Cantidad Sistema': 0,
                 'Cantidad Física': item.cantidadFisica,
                 'Estado': 'SOBRANTE',
                 'ID_Documento_Firestore': item.idConteo
@@ -658,31 +695,9 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
 
     const finalReports = {};
 
-    // Generate Forced Locators report
-    const forcedLocatorsData = detailedReport
-        .filter(item => item['Localizador Forzado'] === 'Sí' && item['Localizador en Sistema'] !== item['Localizador Físico'])
-        .map(item => ({
-            'Subinventario': item.Subinventario,
-            'Referencia': item.Referencia,
-            'Descripción': item.Descripción,
-            'Localizador en Auditoria': item['Localizador en Sistema'],
-            'Localizador Físico Real': item['Localizador Físico'],
-            'Cantidad Contada': item['Cantidad Física'],
-            'Auditor': item.Auditor,
-            '# Conteo': item['# Conteo']
-        }));
-
-    if (forcedLocatorsData.length > 0) {
-        const header = [
-            { A: 'Reporte de Localizadores Forzados con Discrepancia' },
-            { A: `Total de Localizadores Forzados con Discrepancia: ${forcedLocatorsData.length}` },
-            { A: '' }
-        ];
-        const worksheet = XLSX.utils.json_to_sheet(forcedLocatorsData, { origin: 'A4' });
-        XLSX.utils.sheet_add_json(worksheet, header, { skipHeader: true, origin: 'A1' });
-        finalReports.forcedLocators = worksheet;
-    }
-
+    // This report is now redundant or needs to be re-evaluated, the main detailed report has the new column.
+    // For now, we will rely on the "Desajuste de Localizador" column in the main report.
+    
     if (filters.includeDetailed) {
         finalReports.detailed = XLSX.utils.json_to_sheet(detailedReport);
     }
@@ -699,14 +714,14 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                     'Cantidad Sistema': 0,
                     'Cantidad Física': 0,
                     'Estados': new Set(),
-                    'Localizadores Forzados': new Set(),
+                    'Desajustes de Localizador': new Set(),
                 };
             }
             nationalConsolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
             nationalConsolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
             nationalConsolidatedData[key]['Subinventarios'].add(item.Subinventario);
             nationalConsolidatedData[key]['Estados'].add(item.Estado);
-            nationalConsolidatedData[key]['Localizadores Forzados'].add(item['Localizador Forzado']);
+            nationalConsolidatedData[key]['Desajustes de Localizador'].add(item['Desajuste de Localizador']);
         });
         const nationalConsolidatedReport = Object.values(nationalConsolidatedData).map(item => ({
             'Referencia': item.Referencia,
@@ -716,7 +731,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             'Cantidad Física': item['Cantidad Física'],
             'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
             'Resumen de Estados': [...item.Estados].join(', '),
-            'Contiene Localizadores Forzados': [...item['Localizadores Forzados']].includes('Sí') ? 'Sí' : 'No',
+            'Contiene Desajustes de Localizador': [...item['Desajustes de Localizador']].includes('SI') ? 'Sí' : 'No',
         }));
         finalReports.nationalConsolidated = XLSX.utils.json_to_sheet(nationalConsolidatedReport);
     }
@@ -740,13 +755,13 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                         'Cantidad Sistema': 0,
                         'Cantidad Física': 0,
                         'Estados': new Set(),
-                        'Localizadores Forzados': new Set(),
+                        'Desajustes de Localizador': new Set(),
                     };
                 }
                 consolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
                 consolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
                 consolidatedData[key]['Estados'].add(item.Estado);
-                consolidatedData[key]['Localizadores Forzados'].add(item['Localizador Forzado']);
+                consolidatedData[key]['Desajustes de Localizador'].add(item['Desajuste de Localizador']);
             });
             const reportData = Object.values(consolidatedData).map(item => ({
                 'Referencia': item.Referencia,
@@ -755,7 +770,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                 'Cantidad Física': item['Cantidad Física'],
                 'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
                 'Resumen de Estados': [...item.Estados].join(', '),
-                'Contiene Localizadores Forzados': [...item['Localizadores Forzados']].includes('Sí') ? 'Sí' : 'No',
+                'Contiene Desajustes de Localizador': [...item['Desajustes de Localizador']].includes('SI') ? 'Sí' : 'No',
             }));
 
             const header = [
