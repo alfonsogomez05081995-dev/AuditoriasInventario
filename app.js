@@ -30,6 +30,7 @@ const domElements = {
     itemDatalist: document.getElementById('item-datalist'),
     itemDescriptionInput: document.getElementById('item-description'),
     itemLocationInput: document.getElementById('item-location'),
+    locationWarning: document.getElementById('location-warning'),
     locationSelectorContainer: document.getElementById('location-selector-container'),
     locationSelector: document.getElementById('location-selector'),
     forceLocationBtn: document.getElementById('force-location-btn'),
@@ -360,6 +361,7 @@ domElements.itemNameInput.addEventListener('change', () => {
     domElements.itemLocationInput.innerHTML = '';
     domElements.itemDescriptionInput.value = '';
     domElements.manualLocationInput.value = '';
+    domElements.locationWarning.classList.add('hidden');
 
     if (items.length > 0) {
         // All items with the same name should have the same description
@@ -375,6 +377,12 @@ domElements.itemNameInput.addEventListener('change', () => {
 
         // Enable the location selector
         domElements.itemLocationInput.disabled = false;
+
+        // Show warning if there are multiple locations
+        if (items.length > 1) {
+            domElements.locationWarning.textContent = '¡Atención! Esta referencia existe en múltiples ubicaciones. Por favor, valida el localizador correcto.';
+            domElements.locationWarning.classList.remove('hidden');
+        }
     } else {
         // If no item is found, keep the location selector disabled
         domElements.itemLocationInput.disabled = true;
