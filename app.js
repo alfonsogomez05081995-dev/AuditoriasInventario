@@ -31,9 +31,6 @@ const domElements = {
     itemDescriptionInput: document.getElementById('item-description'),
     itemLocationInput: document.getElementById('item-location'),
     locationWarning: document.getElementById('location-warning'),
-    locationSelectorContainer: document.getElementById('location-selector-container'),
-    locationSelector: document.getElementById('location-selector'),
-    forceLocationBtn: document.getElementById('force-location-btn'),
     manualLocationInput: document.getElementById('manual-location-input'),
     conteoTableBody: document.querySelector('#conteo-table tbody'),
     confirmarConteoButton: document.getElementById('confirmar-conteo-button'),
@@ -66,15 +63,27 @@ const domElements = {
     filterReferencia: document.getElementById('filter-referencia'),
     filterLocalizador: document.getElementById('filter-localizador'),
     filterSubinventario: document.getElementById('filter-subinventario'),
+    loadMoreButtonContainer: document.getElementById('load-more-container'),
+    // Costs Management Elements
+    costsUploadForm: document.getElementById('costs-upload-form'),
+    costsFileInput: document.getElementById('costs-file-input'),
+    costsFileName: document.getElementById('costs-file-name'),
+    costsSearchInput: document.getElementById('costs-search-input'),
+    costsTableBody: document.querySelector('#costs-table tbody'),
 };
 
 // --- STATE MANAGEMENT ---
 let inventarioAudit = [];
 let conteoFisico = [];
 let auditsCache = [];
+let costsCache = [];
 let selectedAuditId = null;
 let currentSubinventario = null;
 let unsubscribeDashboard = null;
+let unsubscribeCosts = null;
+let lastVisibleItem = null; // For pagination
+let isLoadingMore = false;
+const PAGE_SIZE = 100; // Load 100 items per page
 
 // --- APP INITIALIZATION ---
 async function initializeAppState() {
@@ -103,9 +112,14 @@ domElements.tabs.forEach(tab => {
         if (tab.disabled) return;
         domElements.tabs.forEach(item => item.classList.remove('active'));
         tab.classList.add('active');
-        const target = document.getElementById(tab.dataset.tab);
+        const targetContent = document.getElementById(tab.dataset.tab);
         domElements.tabContents.forEach(content => content.classList.remove('active'));
-        target.classList.add('active');
+        targetContent.classList.add('active');
+
+        // Special actions for specific tabs
+        if (tab.dataset.tab === 'costos') {
+            handleCostsTabSelected();
+        }
     });
 });
 
@@ -216,17 +230,46 @@ function parseExcel(file) {
                 const parsedData = rows.map(row => ({
                     nombre: row[0] || '',
                     descripcion: row[1] || '',
-                    // row[2] is 'Nombre de entidad jurídica'
-                    ubicacion: row[3] || '', // 'Ubicación de inventario de localizador'
-                    subinventario: row[4] || '', // 'Subinventario'
-                    // row[5] is 'Subinventory Description'
-                    // row[6] is 'Organización de inventario - Nombre'
-                    cantidadSistema: parseFloat(row[7]) || 0 // 'Cantidad'
+                    ubicacion: row[3] || '',
+                    subinventario: row[4] || '',
+                    cantidadSistema: parseFloat(row[7]) || 0
                 }));
                 resolve(parsedData);
             }
             catch (err) {
                 reject(err);
+            }
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function parseCostsFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                const rows = json.slice(1).filter(row => row && row[0] && typeof row[13] !== 'undefined');
+                const parsedData = rows.map(row => ({
+                    referencia: String(row[0]).trim(),
+                    tecnologia: String(row[4] || '').trim(), // Column E
+                    naturaleza: String(row[5] || '').trim(), // Column F
+                    costo: parseFloat(row[13]) || 0      // Column N
+                })).filter(item => item.referencia);
+
+                if (parsedData.length === 0) {
+                    return reject(new Error("No se encontraron datos válidos en el archivo. Asegúrate de que las columnas A, E, F y N contengan datos."));
+                }
+                resolve(parsedData);
+            } catch (err) {
+                console.error("Error parsing costs file:", err);
+                reject(new Error("Error al leer el formato del archivo de costos."));
             }
         };
         reader.onerror = (err) => reject(err);
@@ -246,32 +289,17 @@ async function selectAudit(auditId) {
         clearSelectedAudit();
         return;
     }
-    
-    ui.showLoader(); // Show loader while we fetch items
-    try {
-        // Fetch all items to derive the subinventories
-        const allItems = await firestoreService.loadAllInventoryItems(auditId);
-        const derivedSubinventarios = [...new Set(allItems.map(item => item.subinventario))].sort();
-        const modifiedAudit = { ...audit, subinventarios: derivedSubinventarios };
 
-        localStorage.setItem('selectedAuditId', auditId);
-        selectedAuditId = auditId;
-        inventarioAudit = []; // Reset inventory on new audit selection.
-        
-        ui.selectAuditUI(modifiedAudit, domElements.selectedAuditInfoConteo, domElements.selectedAuditInfoReporte, domElements.conteoWrapper, domElements.reporteWrapper, domElements.conteoTab, domElements.reporteTab, domElements.finalizeAuditButton, domElements.subinventarioSelect, domElements.conteoFormSection);
-        
-        document.getElementById('dashboard-container').classList.remove('hidden');
-        if (unsubscribeDashboard) unsubscribeDashboard();
-        unsubscribeDashboard = firestoreService.listenToPhysicalCounts(auditId, handleDashboardUpdate);
+    localStorage.setItem('selectedAuditId', auditId);
+    selectedAuditId = auditId;
+    inventarioAudit = []; // Reset inventory on new audit selection. 
 
-        resetConteoForm();
-    } catch (error) {
-        console.error("Error selecting audit and deriving subinventories:", error);
-        alert("Error al seleccionar la auditoría: " + error.message);
-        clearSelectedAudit();
-    } finally {
-        ui.hideLoader();
-    }
+    ui.selectAuditUI(audit, domElements.selectedAuditInfoConteo, domElements.selectedAuditInfoReporte, domElements.conteoWrapper, domElements.reporteWrapper, domElements.conteoTab, domElements.reporteTab, domElements.finalizeAuditButton, domElements.subinventarioSelect, domElements.conteoFormSection);
+
+    document.getElementById('dashboard-container').classList.remove('hidden');
+    unsubscribeDashboard = firestoreService.listenToPhysicalCounts(auditId, handleDashboardUpdate);
+
+    resetConteoForm();
 }
 
 function clearSelectedAudit() {
@@ -306,37 +334,57 @@ function handleDashboardUpdate(counts) {
 // --- PHYSICAL COUNT ---
 domElements.subinventarioSelect.addEventListener('change', async (e) => {
     currentSubinventario = e.target.value;
+    inventarioAudit = [];
+    lastVisibleItem = null;
+    domElements.itemDatalist.innerHTML = '';
+
     if (!currentSubinventario) {
         domElements.conteoFormSection.classList.add('hidden');
         return;
     }
-    ui.showFeedback(domElements.conteoStatusEl, `Cargando artículos para ${currentSubinventario}...`, 'info');
     domElements.conteoFormSection.classList.remove('hidden');
     domElements.conteoForm.reset();
-    ui.showLoader();
-    try {
-        inventarioAudit = await firestoreService.loadInventoryItemsBySubinventory(selectedAuditId, currentSubinventario);
-        ui.showFeedback(domElements.conteoStatusEl, `${inventarioAudit.length} artículos cargados.`, 'success');
-        prepareConteoForm();
-    }
-    catch (error) {
-        console.error("Error loading inventory items by subinventory:", error);
-        ui.showFeedback(domElements.conteoStatusEl, error.message, 'error');
-    }
-    finally {
-        ui.hideLoader();
-    }
+    await loadMoreItems();
 });
 
-function prepareConteoForm() {
-    const uniqueItems = [...new Map(inventarioAudit.map(item => [item.nombre, item])).values()];
-    domElements.itemDatalist.innerHTML = '';
-    uniqueItems.forEach(item => {
+async function loadMoreItems() {
+    if (isLoadingMore || !selectedAuditId || !currentSubinventario) return;
+
+    isLoadingMore = true;
+    ui.showLoader();
+    ui.showFeedback(domElements.conteoStatusEl, `Cargando más artículos para ${currentSubinventario}...`, 'info');
+
+    try {
+        const { items, lastVisible } = await firestoreService.loadInventoryItemsBySubinventory(
+            selectedAuditId,
+            currentSubinventario,
+            PAGE_SIZE,
+            lastVisibleItem
+        );
+
+        inventarioAudit.push(...items);
+        lastVisibleItem = lastVisible;
+
+        ui.showFeedback(domElements.conteoStatusEl, `${inventarioAudit.length} artículos cargados.`, 'success');
+        prepareConteoForm(items);
+
+        ui.manageLoadMoreButton(domElements.loadMoreButtonContainer, lastVisible, loadMoreItems);
+
+    } catch (error) {
+        console.error("Error loading more inventory items:", error);
+        ui.showFeedback(domElements.conteoStatusEl, error.message, 'error');
+    } finally {
+        isLoadingMore = false;
+        ui.hideLoader();
+    }
+}
+
+function prepareConteoForm(newItems) {
+    newItems.forEach(item => {
         const option = document.createElement('option');
         option.value = item.nombre;
         domElements.itemDatalist.appendChild(option);
     });
-    resetConteoForm();
 }
 
 function resetConteoForm() {
@@ -354,20 +402,16 @@ function handleDeleteConteoItem(index) {
 
 domElements.itemNameInput.addEventListener('change', () => {
     const selectedItemName = domElements.itemNameInput.value;
-    // Use filter to get all items matching the name in the current subinventory
     const items = inventarioAudit.filter(item => item.nombre === selectedItemName && item.subinventario === currentSubinventario);
 
-    // Clear previous options and reset related fields
     domElements.itemLocationInput.innerHTML = '';
     domElements.itemDescriptionInput.value = '';
     domElements.manualLocationInput.value = '';
     domElements.locationWarning.classList.add('hidden');
 
     if (items.length > 0) {
-        // All items with the same name should have the same description
         domElements.itemDescriptionInput.value = items[0].descripcion;
         
-        // Populate the select with all found locations
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item.ubicacion;
@@ -375,16 +419,13 @@ domElements.itemNameInput.addEventListener('change', () => {
             domElements.itemLocationInput.appendChild(option);
         });
 
-        // Enable the location selector
         domElements.itemLocationInput.disabled = false;
 
-        // Show warning if there are multiple locations
         if (items.length > 1) {
             domElements.locationWarning.textContent = '¡Atención! Esta referencia existe en múltiples ubicaciones. Por favor, valida el localizador correcto.';
             domElements.locationWarning.classList.remove('hidden');
         }
     } else {
-        // If no item is found, keep the location selector disabled
         domElements.itemLocationInput.disabled = true;
     }
 });
@@ -484,6 +525,86 @@ domElements.confirmarConteoButton.addEventListener('click', async () => {
     }
 });
 
+// --- COSTS MANAGEMENT ---
+function handleCostsTabSelected() {
+    if (unsubscribeCosts) {
+        unsubscribeCosts();
+    }
+    unsubscribeCosts = firestoreService.listenToCosts((costs) => {
+        costsCache = costs;
+        ui.renderCostsTable(domElements.costsTableBody, costsCache, handleDeleteCost, handleUpdateCostItem);
+        ui.filterCostsTable(domElements.costsSearchInput, domElements.costsTableBody);
+    });
+}
+
+domElements.costsFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    ui.updateCostsFileName(file ? file.name : null);
+});
+
+domElements.costsUploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = domElements.costsFileInput.files[0];
+    if (!file) {
+        ui.showCostsUploadStatus('Por favor, selecciona un archivo Excel.', 'error');
+        return;
+    }
+
+    const confirmation = confirm("Atención: Esta acción reemplazará TODOS los costos existentes con los datos del archivo. ¿Deseas continuar?");
+    if (!confirmation) return;
+
+    ui.showLoader();
+    
+    try {
+        ui.showCostsUploadStatus('Procesando archivo...', 'info');
+        const parsedData = await parseCostsFile(file);
+        
+        await firestoreService.replaceCosts(parsedData, (message) => {
+            ui.showCostsUploadStatus(message, 'info');
+        });
+
+        ui.showCostsUploadStatus('¡Los costos se han actualizado con éxito!', 'success');
+        domElements.costsUploadForm.reset();
+        ui.updateCostsFileName(null);
+    } catch (error) {
+        console.error("Error uploading costs file:", error);
+        ui.showCostsUploadStatus(`Error: ${error.message}`, 'error');
+    } finally {
+        ui.hideLoader();
+    }
+});
+
+domElements.costsSearchInput.addEventListener('keyup', () => {
+    ui.filterCostsTable(domElements.costsSearchInput, domElements.costsTableBody);
+});
+
+async function handleDeleteCost(referencia) {
+    ui.showLoader();
+    try {
+        await firestoreService.deleteCost(referencia);
+        ui.showCostsUploadStatus('Costo eliminado con éxito.', 'success');
+    } catch (error) {
+        console.error("Error deleting cost:", error);
+        ui.showCostsUploadStatus(`Error al eliminar: ${error.message}`, 'error');
+    } finally {
+        ui.hideLoader();
+    }
+}
+
+async function handleUpdateCostItem(referencia, dataToUpdate) {
+    ui.showLoader();
+    try {
+        await firestoreService.updateCostItem(referencia, dataToUpdate);
+        ui.showCostsUploadStatus('Costo actualizado con éxito.', 'success');
+    } catch (error) {
+        console.error("Error updating cost item:", error);
+        ui.showCostsUploadStatus(`Error al guardar: ${error.message}`, 'error');
+    } finally {
+        ui.hideLoader();
+    }
+}
+
+
 // --- REPORTING & FINALIZING ---
 domElements.finalizeAuditButton.addEventListener('click', async () => {
     if (!selectedAuditId)
@@ -530,21 +651,25 @@ domElements.exportButton.addEventListener('click', async () => {
         return;
     }
 
-    ui.showFeedback(domElements.reportStatusEl, 'Generando reportes filtrados...', 'info');
+    ui.showFeedback(domElements.reportStatusEl, 'Generando reportes... (Esto puede tardar unos segundos)', 'info');
     ui.showLoader();
     try {
         const audit = auditsCache.find(a => a.id === selectedAuditId);
         if (!audit) throw new Error("Auditoría no encontrada");
 
-        const allSystemItems = await firestoreService.loadAllInventoryItems(selectedAuditId);
-        const allCountSessions = await firestoreService.getPhysicalCountsForReport(selectedAuditId);
+        // Fetch all necessary data in parallel
+        const [allSystemItems, allCountSessions, allCosts] = await Promise.all([
+            firestoreService.loadAllInventoryItems(selectedAuditId),
+            firestoreService.getPhysicalCountsForReport(selectedAuditId),
+            firestoreService.getAllCosts() // Fetch costs for reporting
+        ]);
 
         if (allCountSessions.length === 0) {
             ui.showFeedback(domElements.reportStatusEl, 'No se han encontrado conteos físicos para esta auditoría.', 'error');
             return;
         }
 
-        const reports = generateReportData(allSystemItems, allCountSessions, audit.subinventarios, filters);
+        const reports = generateReportData(allSystemItems, allCountSessions, audit.subinventarios, filters, allCosts);
 
         const fileName = `Reporte_Auditoria_${audit.name.replace(/\s+/g, '_')}.xlsx`;
         const wb = XLSX.utils.book_new();
@@ -561,8 +686,8 @@ domElements.exportButton.addEventListener('click', async () => {
                 XLSX.utils.book_append_sheet(wb, subReport.worksheet, safeSheetName);
             });
         }
-        if (reports.forcedLocators) {
-            XLSX.utils.book_append_sheet(wb, reports.forcedLocators, 'Localizadores Forzados');
+        if (reports.financialReport) { // Add financial report
+            XLSX.utils.book_append_sheet(wb, reports.financialReport, 'Informe Financiero');
         }
 
         XLSX.writeFile(wb, fileName);
@@ -578,8 +703,14 @@ domElements.exportButton.addEventListener('click', async () => {
     }
 });
 
-function generateReportData(systemInventory, countSessions, subinventarios, filters) {
-    // Create a map of all system locations for easy lookup
+function generateReportData(systemInventory, countSessions, subinventarios, filters, costs) {
+    const costsMap = new Map(costs.map(c => [c.id, {
+        costo: c.costo || 0,
+        tecnologia: c.tecnologia || '',
+        naturaleza: c.naturaleza || ''
+    }]));
+
+    // 1. Create a map of all system locations for easy lookup
     const systemLocationsMap = new Map();
     systemInventory.forEach(item => {
         const key = `${item.nombre}_${item.subinventario}`.toLowerCase();
@@ -589,11 +720,11 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
         systemLocationsMap.get(key).push(item.ubicacion);
     });
 
-    // 1. Sort sessions to create a sequential count number
+    // 2. Sort sessions to create a sequential count number
     const sortedSessions = countSessions.sort((a, b) => a.conteoDate.toMillis() - b.conteoDate.toMillis());
     const sessionsWithCountNumber = sortedSessions.map((session, index) => ({ ...session, numeroConteo: index + 1 }));
 
-    // 2. Flatten all physical counts and combine with session data
+    // 3. Flatten all physical counts and combine with session data
     const flatPhysicalCounts = sessionsWithCountNumber.flatMap(session =>
         session.items.map(item => ({
             ...item,
@@ -604,7 +735,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
         }))
     );
 
-    // 3. Create the detailed data map (base for all reports)
+    // 4. Create the detailed data map (base for all reports)
     const detailedData = {};
     systemInventory.forEach(item => {
         const key = `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
@@ -612,7 +743,7 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
             'ID Conteo': 'N/A',
             '# Conteo': 'N/A',
             'Auditor': 'N/A',
-            'Desajuste de Localizador': 'NO', // New Column
+            'Desajuste de Localizador': 'NO',
             'Subinventario': item.subinventario,
             'Referencia': item.nombre,
             'Descripción': item.descripcion,
@@ -626,58 +757,66 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
     });
 
     flatPhysicalCounts.forEach(item => {
-        // Use the original location selected in the dropdown for matching
-        const key = `${item.nombre}_${item.subinventario}_${item.ubicacionOriginal}`.toLowerCase();
+        const key = `${item.nombre}_${item.subinventario}_${item.ubicacionOriginal || item.ubicacion}`.toLowerCase();
         
         if (detailedData[key]) {
             detailedData[key]['Cantidad Física'] += item.cantidadFisica;
-            detailedData[key]['ID Conteo'] = item.auditor;
+            detailedData[key]['ID Conteo'] = item.idConteo;
             detailedData[key]['# Conteo'] = item.numeroConteo;
             detailedData[key]['Auditor'] = item.auditor;
             
-            // New logic for locator mismatch
             const systemLocs = systemLocationsMap.get(`${item.nombre}_${item.subinventario}`.toLowerCase()) || [];
-            const physicalLoc = item.ubicacion; // This is the forced location
-            if (systemLocs.includes(physicalLoc)) {
-                detailedData[key]['Desajuste de Localizador'] = 'NO';
-            } else {
-                detailedData[key]['Desajuste de Localizador'] = 'SI';
-            }
-
+            const physicalLoc = item.ubicacion;
+            detailedData[key]['Desajuste de Localizador'] = systemLocs.includes(physicalLoc) ? 'NO' : 'SI';
             detailedData[key]['Localizador Físico'] = physicalLoc;
             detailedData[key]['Estado'] = ''; // Clear status, will be recalculated
             detailedData[key]['ID_Documento_Firestore'] = item.idConteo;
         } else {
-            // This is a "sobrante" (surplus) item
             const sobranteKey = `${item.nombre}_${item.subinventario}_${item.ubicacion}`.toLowerCase();
-            detailedData[sobranteKey] = {
-                'ID Conteo': item.auditor,
-                '# Conteo': item.numeroConteo,
-                'Auditor': item.auditor,
-                'Desajuste de Localizador': 'SI', // Always a mismatch for sobrantes
-                'Subinventario': item.subinventario,
-                'Referencia': item.nombre,
-                'Descripción': item.descripcion || '',
-                'Localizador en Sistema': 'N/A',
-                'Localizador Físico': item.ubicacion,
-                'Cantidad Sistema': 0,
-                'Cantidad Física': item.cantidadFisica,
-                'Estado': 'SOBRANTE',
-                'ID_Documento_Firestore': item.idConteo
-            };
+            if (!detailedData[sobranteKey]) {
+                 detailedData[sobranteKey] = {
+                    'ID Conteo': item.idConteo,
+                    '# Conteo': item.numeroConteo,
+                    'Auditor': item.auditor,
+                    'Desajuste de Localizador': 'SI',
+                    'Subinventario': item.subinventario,
+                    'Referencia': item.nombre,
+                    'Descripción': item.descripcion || '',
+                    'Localizador en Sistema': 'SOBRANTE',
+                    'Localizador Físico': item.ubicacion,
+                    'Cantidad Sistema': 0,
+                    'Cantidad Física': 0, // Accumulate below
+                    'Estado': 'SOBRANTE',
+                    'ID_Documento_Firestore': item.idConteo
+                };
+            }
+            detailedData[sobranteKey]['Cantidad Física'] += item.cantidadFisica;
         }
     });
 
     let detailedReport = Object.values(detailedData).map(item => {
         const diferencia = item['Cantidad Física'] - item['Cantidad Sistema'];
-        if (item.Estado === '') {
+        if (item.Estado === '') { // Recalculate status only for items that were found
             if (diferencia > 0) item.Estado = 'SOBRANTE';
             else if (diferencia < 0) item.Estado = 'FALTANTE';
             else item.Estado = 'OK';
         }
+        
+        const costData = costsMap.get(item.Referencia) || { costo: 0, tecnologia: '', naturaleza: '' };
+        const costoUnitario = costData.costo;
+        const valorSistema = item['Cantidad Sistema'] * costoUnitario;
+        const valorFisico = item['Cantidad Física'] * costoUnitario;
+        const valorDiferencia = diferencia * costoUnitario;
+
         return {
             ...item,
-            'Diferencia': diferencia
+            'Diferencia': diferencia,
+            'Tecnologia': costData.tecnologia,
+            'Naturaleza': costData.naturaleza,
+            'Costo Unitario': costoUnitario,
+            'Valor Sistema': valorSistema,
+            'Valor Físico': valorFisico,
+            'Valor Diferencia': valorDiferencia
         }
     });
 
@@ -703,11 +842,28 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
 
     const finalReports = {};
 
-    // This report is now redundant or needs to be re-evaluated, the main detailed report has the new column.
-    // For now, we will rely on the "Desajuste de Localizador" column in the main report.
-    
     if (filters.includeDetailed) {
-        finalReports.detailed = XLSX.utils.json_to_sheet(detailedReport);
+        const reportSheet = detailedReport.map(item => ({
+            'ID Conteo': item['ID Conteo'],
+            '# Conteo': item['# Conteo'],
+            'Auditor': item.Auditor,
+            'Desajuste de Localizador': item['Desajuste de Localizador'],
+            'Subinventario': item.Subinventario,
+            'Referencia': item.Referencia,
+            'Descripción': item.Descripción,
+            'Localizador en Sistema': item['Localizador en Sistema'],
+            'Localizador Físico': item['Localizador Físico'],
+            'Estado': item.Estado,
+            'Cant. Sistema': item['Cantidad Sistema'],
+            'Cant. Física': item['Cantidad Física'],
+            'Diferencia': item.Diferencia,
+            'Costo Unit.': item['Costo Unitario'],
+            'Valor Sistema': item['Valor Sistema'],
+            'Valor Físico': item['Valor Físico'],
+            'Valor Diferencia': item['Valor Diferencia'],
+            'ID_Documento_Firestore': item['ID_Documento_Firestore']
+        }));
+        finalReports.detailed = XLSX.utils.json_to_sheet(reportSheet);
     }
 
     if (filters.includeNationalConsolidated) {
@@ -718,81 +874,72 @@ function generateReportData(systemInventory, countSessions, subinventarios, filt
                 nationalConsolidatedData[key] = {
                     'Referencia': item.Referencia,
                     'Descripción': item.Descripción,
+                    'Tecnologia': item.Tecnologia,
+                    'Naturaleza': item.Naturaleza,
                     'Subinventarios': new Set(),
+                    'Localizadores': new Set(),
+                    'Desajustes': [], // To aggregate mismatch statuses
                     'Cantidad Sistema': 0,
                     'Cantidad Física': 0,
-                    'Estados': new Set(),
-                    'Desajustes de Localizador': new Set(),
+                    'Costo Unitario': item['Costo Unitario'],
                 };
             }
+            nationalConsolidatedData[key]['Subinventarios'].add(item.Subinventario);
+            nationalConsolidatedData[key]['Localizadores'].add(item['Localizador Físico']);
+            nationalConsolidatedData[key]['Desajustes'].push(item['Desajuste de Localizador']);
             nationalConsolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
             nationalConsolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
-            nationalConsolidatedData[key]['Subinventarios'].add(item.Subinventario);
-            nationalConsolidatedData[key]['Estados'].add(item.Estado);
-            nationalConsolidatedData[key]['Desajustes de Localizador'].add(item['Desajuste de Localizador']);
         });
-        const nationalConsolidatedReport = Object.values(nationalConsolidatedData).map(item => ({
-            'Referencia': item.Referencia,
-            'Descripción': item.Descripción,
-            'Subinventarios': [...item.Subinventarios].join(', '),
-            'Cantidad Sistema': item['Cantidad Sistema'],
-            'Cantidad Física': item['Cantidad Física'],
-            'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
-            'Resumen de Estados': [...item.Estados].join(', '),
-            'Contiene Desajustes de Localizador': [...item['Desajustes de Localizador']].includes('SI') ? 'Sí' : 'No',
-        }));
-        finalReports.nationalConsolidated = XLSX.utils.json_to_sheet(nationalConsolidatedReport);
-    }
 
-    if (filters.includeSubinventoryConsolidated) {
-        const subinventoryReports = subinventarios.map(sub => {
-            const subInventoryItems = detailedReport.filter(item => item.Subinventario === sub);
-            if (subInventoryItems.length === 0) return null;
+        const nationalConsolidatedReport = Object.values(nationalConsolidatedData).map(item => {
+            const diferencia = item['Cantidad Física'] - item['Cantidad Sistema'];
+            let resumenDeEstados = 'OK';
+            if (diferencia > 0) resumenDeEstados = 'SOBRANTE';
+            if (diferencia < 0) resumenDeEstados = 'FALTANTE';
 
-            const subInventorySessions = sessionsWithCountNumber.filter(session => session.subinventario === sub);
-            const auditors = [...new Set(subInventorySessions.map(s => s.auditor))].join(', ');
-            const sessionCount = subInventorySessions.length;
+            const desajusteDeLocalizador = item.Desajustes.includes('SI') ? 'SI' : 'NO';
 
-            const consolidatedData = {};
-            subInventoryItems.forEach(item => {
-                const key = item.Referencia.toLowerCase();
-                if (!consolidatedData[key]) {
-                    consolidatedData[key] = {
-                        'Referencia': item.Referencia,
-                        'Descripción': item.Descripción,
-                        'Cantidad Sistema': 0,
-                        'Cantidad Física': 0,
-                        'Estados': new Set(),
-                        'Desajustes de Localizador': new Set(),
-                    };
-                }
-                consolidatedData[key]['Cantidad Sistema'] += item['Cantidad Sistema'];
-                consolidatedData[key]['Cantidad Física'] += item['Cantidad Física'];
-                consolidatedData[key]['Estados'].add(item.Estado);
-                consolidatedData[key]['Desajustes de Localizador'].add(item['Desajuste de Localizador']);
-            });
-            const reportData = Object.values(consolidatedData).map(item => ({
+            return {
                 'Referencia': item.Referencia,
                 'Descripción': item.Descripción,
+                'Subinventarios': [...item.Subinventarios].join(', '),
+                'Localizadores': [...item.Localizadores].join(', '),
+                'Tecnologia': item.Tecnologia,
+                'Naturaleza': item.Naturaleza,
                 'Cantidad Sistema': item['Cantidad Sistema'],
                 'Cantidad Física': item['Cantidad Física'],
-                'Diferencia': item['Cantidad Física'] - item['Cantidad Sistema'],
-                'Resumen de Estados': [...item.Estados].join(', '),
-                'Contiene Desajustes de Localizador': [...item['Desajustes de Localizador']].includes('SI') ? 'Sí' : 'No',
-            }));
+                'Diferencia': diferencia,
+                'Resumen de Estados': resumenDeEstados,
+                'Desajuste de Localizador': desajusteDeLocalizador,
+                'Costo Unit.': item['Costo Unitario'],
+                'Valor Sistema': item['Cantidad Sistema'] * item['Costo Unitario'],
+                'Valor Físico': item['Cantidad Física'] * item['Costo Unitario'],
+                'Valor Diferencia': diferencia * item['Costo Unitario'],
+            };
+        });
 
-            const header = [
-                { A: 'Subinventario', B: sub },
-                { A: 'Auditores', B: auditors },
-                { A: 'Sesiones de Conteo', B: sessionCount },
-                { A: '' },
-            ];
-            const worksheet = XLSX.utils.json_to_sheet(reportData, { origin: 'A5' });
-            XLSX.utils.sheet_add_json(worksheet, header, { skipHeader: true, origin: 'A1' });
-            return { sheetName: `Consolidado_${sub}`, worksheet: worksheet };
-        }).filter(Boolean);
-        finalReports.subinventoryReports = subinventoryReports;
+        finalReports.nationalConsolidated = XLSX.utils.json_to_sheet(nationalConsolidatedReport, {header: [
+            "Referencia", "Descripción", "Subinventarios", "Localizadores", "Tecnologia", "Naturaleza", 
+            "Cantidad Sistema", "Cantidad Física", "Diferencia", "Resumen de Estados", 
+            "Desajuste de Localizador", "Costo Unit.", "Valor Sistema", "Valor Físico", "Valor Diferencia"
+        ]});
     }
+
+    // Financial Report
+    const totalSistema = detailedReport.reduce((sum, item) => sum + item['Valor Sistema'], 0);
+    const totalFisico = detailedReport.reduce((sum, item) => sum + item['Valor Físico'], 0);
+    const totalSobrantes = detailedReport.filter(i => i.Estado === 'SOBRANTE').reduce((sum, item) => sum + item['Valor Diferencia'], 0);
+    const totalFaltantes = detailedReport.filter(i => i.Estado === 'FALTANTE').reduce((sum, item) => sum + Math.abs(item['Valor Diferencia']), 0);
+
+    const financialData = [
+        { 'Métrica': 'Valor Total del Inventario (Según Sistema)', 'Valor': totalSistema },
+        { 'Métrica': 'Valor Total del Inventario (Contado Físico)', 'Valor': totalFisico },
+        { 'Métrica': 'Valor Total de la Diferencia (Neta)', 'Valor': totalFisico - totalSistema },
+        { 'Métrica': ' ', 'Valor': ' ' },
+        { 'Métrica': 'Valor Total en SOBRANTES', 'Valor': totalSobrantes },
+        { 'Métrica': 'Valor Total en FALTANTES', 'Valor': totalFaltantes },
+    ];
+    finalReports.financialReport = XLSX.utils.json_to_sheet(financialData);
 
     return finalReports;
 }

@@ -74,6 +74,7 @@
                 <button class="tab-item active" data-tab="gestion">1. Gestión de Auditorías</button>
                 <button class="tab-item" data-tab="conteo" id="conteo-tab" disabled>2. Realizar Conteo</button>
                 <button class="tab-item" data-tab="reporte" id="reporte-tab" disabled>3. Finalizar y Reportar</button>
+                <button class="tab-item" data-tab="costos">Gestión de Costos</button>
             </nav>
 
             <!-- Tab 1: Gestión de Auditorías -->
@@ -163,6 +164,7 @@
                             </div>
                             <button id="confirmar-conteo-button" class="btn btn-primary">Confirmar y Guardar Conteo Físico</button>
                             <div id="conteo-status" class="feedback"></div>
+                            <div id="load-more-container" style="text-align: center; margin: 20px 0;"></div>
                         </div>
                     </div>
                 </div>
@@ -230,6 +232,55 @@
                             <button id="finalize-audit-button" class="btn btn-danger">Finalizar Auditoría (Archivar)</button>
                         </div>
                         <p class="small-text">Al finalizar una auditoría, ya no se podrán agregar más conteos. Esta acción es irreversible.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 4: Gestión de Costos -->
+            <div id="costos" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Gestión de Costos de Artículos</h2>
+                    </div>
+                    <div class="card-sub-section">
+                        <h4>Cargar Archivo de Costos</h4>
+                        <p class="small-text">
+                            Sube un archivo Excel (.xlsx) para cargar o actualizar masivamente los costos.
+                            El sistema leerá la <strong>columna A (Referencia)</strong>, <strong>E (Tecnologia)</strong>, <strong>F (Naturaleza)</strong> y la <strong>columna N (Costo)</strong>.
+                            <strong>Atención:</strong> Esta acción reemplazará todos los costos existentes con el contenido del archivo.
+                        </p>
+                        <form id="costs-upload-form">
+                            <div class="file-upload-wrapper">
+                                <input type="file" id="costs-file-input" accept=".xlsx, .xls" required style="display: none;">
+                                <label for="costs-file-input" class="btn btn-secondary">Seleccionar Archivo</label>
+                                <span id="costs-file-name" style="margin-left: 10px;">Ningún archivo seleccionado</span>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Cargar y Reemplazar Datos</button>
+                        </form>
+                        <div id="costs-upload-status" class="feedback"></div>
+                    </div>
+                    <hr>
+                    <div class="card-sub-section">
+                        <h4>Costos Actuales</h4>
+                        <div class="form-group">
+                            <input type="text" id="costs-search-input" class="input-base" placeholder="Buscar por referencia...">
+                        </div>
+                        <div class="table-container">
+                            <table id="costs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Referencia</th>
+                                        <th>Costo</th>
+                                        <th>Tecnologia</th>
+                                        <th>Naturaleza</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Los datos de costos se cargarán aquí dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

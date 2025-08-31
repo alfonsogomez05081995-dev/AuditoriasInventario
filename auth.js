@@ -10,7 +10,8 @@ import { showFeedback } from './ui.js';
 const authorizedUsers = [
     "luis.gomez3diebold@gmail.com",
     "luisgm.ldv@gmail.com",
-    "proskaterdezazfixia@gmail.com"
+    "proskaterdezazfixia@gmail.com",
+    "andreamartinez08051995@gmail.com"
 ];
 
 function handleAuthError(error, authErrorEl) {
