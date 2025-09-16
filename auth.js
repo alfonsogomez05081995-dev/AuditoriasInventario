@@ -11,7 +11,9 @@ const authorizedUsers = [
     "luis.gomez3diebold@gmail.com",
     "luisgm.ldv@gmail.com",
     "proskaterdezazfixia@gmail.com",
-    "andreamartinez08051995@gmail.com"
+    "andreamartinez08051995@gmail.com",
+    "dayan.trilleras@dieboldnixdorf.com",
+    "luis.gomez3@dieboldnixdorf.com"
 ];
 
 function handleAuthError(error, authErrorEl) {
@@ -36,7 +38,7 @@ export function setupAuth(
     initializeAppState
 ) {
     onAuthStateChanged(auth, (user) => {
-        if (user && authorizedUsers.includes(user.email)) {
+        if (user && authorizedUsers.map(email => email.toLowerCase()).includes(user.email.toLowerCase())) {
             loginContainer.classList.add('hidden');
             appContainer.classList.remove('hidden');
             userEmailEl.textContent = user.email;
